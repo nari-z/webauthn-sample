@@ -1,0 +1,196 @@
+<!-- <!DOCTYPE html>
+<html> -->
+
+{{define "index"}}
+
+<head>
+  <meta charset="utf-8">
+  <title>WebAuthn Sample</title>
+</head>
+
+<body>
+
+  Username:
+  <br>
+  <input type="text" name="username" id="username" placeholder="please input name.">
+  <br>
+  <br>
+  <button onclick="registerUser()">Register</button>
+  <button onclick="assertUser()">Assert</button>
+
+  <script>
+    const baseURL = 'http://localhost:4444';
+
+// Form
+    window.addEventListener("DOMContentLoaded", function () {
+      // check whether current browser supports WebAuthn
+      if (!window.PublicKeyCredential) {
+        alert("Error: this browser does not support WebAuthn");
+        return;
+      }
+    });
+
+    function getUserName() {
+      return document.getElementById("username").value;
+    }
+
+// Utility
+    function stringToArrayBuffer(src) {
+      // String to ArrayBuffer
+      return (new Uint16Array([].map.call(src, function(c) {
+        return c.charCodeAt(0)
+      }))).buffer;
+    }
+
+    function base64ToArrayBuffer(src) {
+      // Base64 to ArrayBuffer
+      return Uint8Array.from(atob(src), c => c.charCodeAt(0));
+    }
+
+    function arrayBufferToBase64(value) {
+      // ArrayBuffer to URLBase64
+      return btoa(String.fromCharCode.apply(null, new Uint8Array(value)))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "");;
+    }
+
+// RelyingParty API
+    function getAttestationOptions(username) {
+      const url = baseURL + '/attenstation/options/' + username;
+
+      return fetch(url, {
+        method: 'GET'
+      });
+    }
+
+    function registerFinish(username, credential) {
+      const url = baseURL + '/attenstation/result/' + username;
+      const data = {
+        id: credential.id,
+          rawId: arrayBufferToBase64(credential.rawId),
+          type: credential.type,
+        response: {
+          clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
+          attestationObject: arrayBufferToBase64(credential.response.attestationObject)
+        }
+      };
+
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+    }
+
+    function getAssertionOptions(username) {
+      const url = baseURL + '/assertion/options/' + username;
+
+      return fetch(url, {
+        method: 'GET'
+      });
+    }
+
+    function authenticationFinish(username, assertion) {
+      const url = baseURL + '/assertion/result/' + username;
+      const data = {
+        id: assertion.id,
+        rawId: arrayBufferToBase64(assertion.rawId),
+        type: assertion.type,
+        response: {
+          authenticatorData: arrayBufferToBase64(assertion.response.authenticatorData),
+          clientDataJSON: arrayBufferToBase64(assertion.response.clientDataJSON),
+          signature: arrayBufferToBase64(assertion.response.signature),
+          userHandle: arrayBufferToBase64(assertion.response.userHandle)
+        }
+      };
+
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+    }
+
+// WebAuthn API
+    function createCredential(options) {
+      options.publicKey.challenge = base64ToArrayBuffer(options.publicKey.challenge);
+      options.publicKey.user.id = base64ToArrayBuffer(options.publicKey.user.id);
+      if (options.publicKey.excludeCredentials != undefined) {
+        options.publicKey.excludeCredentials = options.publicKey.excludeCredentials
+                                                .map(credential => Object.assign({},
+                                                  credential, {
+                                                    id: base64ToArrayBuffer(credential.id)
+                                                  }));
+      }
+
+      return navigator.credentials.create({
+        'publicKey': options.publicKey
+      });
+    }
+
+    function getAssertion(options) {
+      options.publicKey.challenge = base64ToArrayBuffer(options.publicKey.challenge);
+      if (options.publicKey.allowCredentials != undefined) {
+        options.publicKey.allowCredentials = options.publicKey.allowCredentials
+                                              .map(credential => Object.assign({},
+                                                credential, {
+                                                  id: base64ToArrayBuffer(credential.id)
+                                                }));
+      }
+
+      return navigator.credentials.get({
+        'publicKey': options.publicKey
+      });
+    }
+
+// Usecase
+    async function registerUser() {
+      const username = getUserName();
+      if (username === "") {
+        alert("Please enter a username");
+        return;
+      }
+
+      try {
+        // 公開鍵クレデンシャル生成オプションを取得
+        const optionsRes = await getAttestationOptions(username);
+        const optionJSON = await optionsRes.json();
+
+        // WebAuthn-APIでアテステーションを作成し登録
+        const credential = await createCredential(optionJSON);
+        const response = await registerFinish(username, credential);
+        alert("Register : " + (response.ok ? "Success" : "Fail"));
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function assertUser() {
+      const username = getUserName();
+      if (username === "") {
+        alert("Please enter a username");
+        return;
+      }
+
+      try {
+        const optionRes = await getAssertionOptions(username);
+        const optionJSON = await optionRes.json();
+
+        const assertion = await getAssertion(optionJSON);
+        const response = await authenticationFinish(username, assertion);
+        alert("Authorize : " + (response.ok ? "Success" : "Fail"));
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+  </script>
+</body>
+
+{{end}}
+<!-- </html> -->
